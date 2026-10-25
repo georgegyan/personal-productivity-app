@@ -1,6 +1,16 @@
 
 import React, { useState } from "react";
-import { View, Text, StyleSheet, StatusBar, Pressable, TextInput, ScrollView, Keyboard } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  Pressable,
+  TextInput,
+  ScrollView,
+  Keyboard,
+  Alert,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const initialTasks = [
@@ -51,6 +61,28 @@ export default function App() {
     setTaskTitle("");
     setErrorMessage("");
     Keyboard.dismiss();
+  }
+
+  function deleteTask(taskId, taskTitle) {
+    Alert.alert(
+      "Delete task",
+      `Are you sure you want to delete "${taskTitle}"?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            setTasks((currentTasks) =>
+              currentTasks.filter((task) => task.id !== taskId)
+            );
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -142,40 +174,51 @@ export default function App() {
           </View>
         ) : (
           tasks.map((task) => (
-            <Pressable
-              key={task.id}
-              style={({ pressed }) => [
-                styles.taskCard,
-                pressed && styles.taskCardPressed,
-              ]}
-              onPress={() => toggleTask(task.id)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: task.completed }}
-            >
-              <View
-                style={[
-                  styles.taskIndicator,
-                  task.completed && styles.taskIndicatorCompleted,
+            <View key={task.id} style={styles.taskCard}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.taskMain,
+                  pressed && styles.taskMainPressed,
                 ]}
+                onPress={() => toggleTask(task.id)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: task.completed }}
+                accessibilityLabel={task.title}
               >
-                {task.completed ? (
-                  <Text style={styles.checkmark}>✓</Text>
-                ) : null}
-              </View>
+                <View
+                  style={[
+                    styles.taskIndicator,
+                    task.completed && styles.taskIndicatorCompleted,
+                  ]}
+                >
+                  {task.completed ? (
+                    <Text style={styles.checkmark}>✓</Text>
+                  ) : null}
+                </View>
 
-              <Text
-                style={[
-                  styles.taskText,
-                  task.completed && styles.taskTextCompleted,
+                <Text
+                  style={[
+                    styles.taskText,
+                    task.completed && styles.taskTextCompleted,
+                  ]}
+                >
+                  {task.title}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.deleteButton,
+                  pressed && styles.deleteButtonPressed,
                 ]}
+                onPress={() => deleteTask(task.id, task.title)}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete ${task.title}`}
+                hitSlop={6}
               >
-                {task.title}
-              </Text>
-
-              <Text style={styles.taskAction}>
-                {task.completed ? "Done" : ""}
-              </Text>
-            </Pressable>
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </Pressable>
+            </View>
           ))
         )}
 
@@ -298,12 +341,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
-    padding: 18,
+    padding: 10,
+    paddingLeft: 14,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
-  taskCardPressed: {
+  taskMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingRight: 8,
+  },
+  taskMainPressed: {
     opacity: 0.7,
   },
   taskIndicator: {
@@ -312,7 +364,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     borderWidth: 1.5,
     borderColor: "#94A3B8",
-    marginRight: 14,
+    marginRight: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -334,11 +386,18 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     textDecorationLine: "line-through",
   },
-  taskAction: {
-    fontSize: 12,
+  deleteButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  deleteButtonPressed: {
+    backgroundColor: "#FEE2E2",
+  },
+  deleteButtonText: {
+    color: "#DC2626",
+    fontSize: 13,
     fontWeight: "600",
-    color: "#0F766E",
-    marginLeft: 8,
   },
   emptyState: {
     alignItems: "center",
