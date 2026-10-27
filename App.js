@@ -19,6 +19,7 @@ const STORAGE_KEY = "@personal_productivity_tasks";
 const CATEGORIES = ["Personal", "Study", "Work"];
 const FILTERS = ["All", "Pending", "Completed"];
 const PRIORITIES = ["Low", "Medium", "High"];
+const SORT_OPTIONS = ["Default", "Priority", "Due date"];
 
 const initialTasks = [
   {
@@ -75,7 +76,6 @@ function isValidDate(dateString) {
 
 function getDueDateStatus(dueDate, completed) {
   if (!dueDate) return "";
-
   if (completed) return "Completed";
 
   const today = getTodayString();
@@ -93,11 +93,12 @@ export default function App() {
   const [selectedPriority, setSelectedPriority] = useState("Medium");
   const [dueDate, setDueDate] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("All");
+  const [selectedSort, setSelectedSort] = useState("Default");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
 
-  // Load saved tasks, including tasks created before this update.
+  // Load saved tasks from the device.
   useEffect(() => {
     async function loadTasks() {
       try {
@@ -133,7 +134,7 @@ export default function App() {
     loadTasks();
   }, []);
 
-  // Persist changes after the initial load is complete.
+  // Save task changes automatically.
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -161,9 +162,7 @@ export default function App() {
   }
 
   function validateForm() {
-    const trimmedTitle = taskTitle.trim();
-
-    if (!trimmedTitle) {
+    if (!taskTitle.trim()) {
       setErrorMessage("Please enter a task title.");
       return false;
     }
@@ -273,6 +272,7 @@ export default function App() {
       ? 0
       : Math.round((completedCount / totalTasks) * 100);
 
+  // First filter tasks by completion status.
   const filteredTasks = tasks.filter((task) => {
     if (selectedFilter === "Pending" && task.completed) {
       return false;
@@ -284,6 +284,45 @@ export default function App() {
 
     return true;
   });
+
+  // Then sort a copy, leaving the saved task array unchanged.
+  const sortedTasks = filteredTasks
+    .map((task, originalIndex) => ({ task, originalIndex }))
+    .sort((a, b) => {
+      if (selectedSort === "Priority") {
+        const priorityRank = {
+          High: 0,
+          Medium: 1,
+          Low: 2,
+        };
+
+        const rankDifference =
+          priorityRank[a.task.priority] -
+          priorityRank[b.task.priority];
+
+        return rankDifference !== 0
+          ? rankDifference
+          : a.originalIndex - b.originalIndex;
+      }
+
+      if (selectedSort === "Due date") {
+        const dateA = a.task.dueDate;
+        const dateB = b.task.dueDate;
+
+        // Tasks without dates always appear last.
+        if (!dateA && dateB) return 1;
+        if (dateA && !dateB) return -1;
+
+        // YYYY-MM-DD dates can be compared alphabetically.
+        if (dateA && dateB && dateA !== dateB) {
+          return dateA < dateB ? -1 : 1;
+        }
+      }
+
+      // Keep the original order for Default and ties.
+      return a.originalIndex - b.originalIndex;
+    })
+    .map((item) => item.task);
 
   if (!isLoaded) {
     return (
@@ -490,7 +529,32 @@ export default function App() {
           ))}
         </View>
 
-        {filteredTasks.length === 0 ? (
+        <Text style={styles.fieldLabel}>Sort tasks by</Text>
+
+        <View style={styles.sortRow}>
+          {SORT_OPTIONS.map((option) => (
+            <Pressable
+              key={option}
+              style={[
+                styles.sortButton,
+                selectedSort === option && styles.sortButtonSelected,
+              ]}
+              onPress={() => setSelectedSort(option)}
+            >
+              <Text
+                style={[
+                  styles.sortButtonText,
+                  selectedSort === option &&
+                    styles.sortButtonTextSelected,
+                ]}
+              >
+                {option}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {sortedTasks.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No tasks to show</Text>
             <Text style={styles.subtitleSmall}>
@@ -498,7 +562,7 @@ export default function App() {
             </Text>
           </View>
         ) : (
-          filteredTasks.map((task) => {
+          sortedTasks.map((task) => {
             const dateStatus = getDueDateStatus(
               task.dueDate,
               task.completed
@@ -786,6 +850,34 @@ const styles = StyleSheet.create({
     color: "#526565",
   },
   filterTextSelected: {
+    color: "#FFFFFF",
+  },
+  sortRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  sortButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 11,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "#DCE6E6",
+    backgroundColor: "#FFFFFF",
+  },
+  sortButtonSelected: {
+    backgroundColor: "#16877F",
+    borderColor: "#16877F",
+  },
+  sortButtonText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#526565",
+  },
+  sortButtonTextSelected: {
     color: "#FFFFFF",
   },
   taskCard: {
