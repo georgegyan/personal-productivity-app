@@ -1,6 +1,16 @@
 
 import React, { useEffect, useState } from "react";
-import { Alert, Keyboard, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -8,38 +18,86 @@ const STORAGE_KEY = "@personal_productivity_tasks";
 
 const CATEGORIES = ["Personal", "Study", "Work"];
 const FILTERS = ["All", "Pending", "Completed"];
+const PRIORITIES = ["Low", "Medium", "High"];
 
 const initialTasks = [
   {
     id: "1",
     title: "Review my daily goals",
     category: "Personal",
+    priority: "Medium",
+    dueDate: "",
     completed: false,
   },
   {
     id: "2",
     title: "Learn React Native",
     category: "Study",
+    priority: "High",
+    dueDate: "",
     completed: false,
   },
   {
     id: "3",
     title: "Complete my daily practice",
     category: "Work",
+    priority: "Medium",
+    dueDate: "",
     completed: false,
   },
 ];
+
+function getTodayString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function isValidDate(dateString) {
+  if (!dateString) return true;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return false;
+  }
+
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
+function getDueDateStatus(dueDate, completed) {
+  if (!dueDate) return "";
+
+  if (completed) return "Completed";
+
+  const today = getTodayString();
+
+  if (dueDate < today) return "Overdue";
+  if (dueDate === today) return "Due today";
+
+  return "Upcoming";
+}
 
 export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
   const [taskTitle, setTaskTitle] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Personal");
+  const [selectedPriority, setSelectedPriority] = useState("Medium");
+  const [dueDate, setDueDate] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("All");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
 
-  // Load saved tasks when the app starts.
+  // Load saved tasks, including tasks created before this update.
   useEffect(() => {
     async function loadTasks() {
       try {
@@ -54,6 +112,12 @@ export default function App() {
               category: CATEGORIES.includes(task.category)
                 ? task.category
                 : "Personal",
+              priority: PRIORITIES.includes(task.priority)
+                ? task.priority
+                : "Medium",
+              dueDate:
+                typeof task.dueDate === "string" ? task.dueDate : "",
+              completed: Boolean(task.completed),
             }));
 
             setTasks(compatibleTasks);
@@ -69,7 +133,7 @@ export default function App() {
     loadTasks();
   }, []);
 
-  // Save task changes after the initial load finishes.
+  // Persist changes after the initial load is complete.
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -87,69 +151,81 @@ export default function App() {
     saveTasks();
   }, [tasks, isLoaded]);
 
-  function addTask() {
+  function resetForm() {
+    setTaskTitle("");
+    setSelectedCategory("Personal");
+    setSelectedPriority("Medium");
+    setDueDate("");
+    setErrorMessage("");
+    setEditingTaskId(null);
+  }
+
+  function validateForm() {
     const trimmedTitle = taskTitle.trim();
 
     if (!trimmedTitle) {
-      setErrorMessage("Please enter a task first.");
-      return;
+      setErrorMessage("Please enter a task title.");
+      return false;
     }
+
+    if (dueDate && !isValidDate(dueDate)) {
+      setErrorMessage("Enter a valid date in YYYY-MM-DD format.");
+      return false;
+    }
+
+    return true;
+  }
+
+  function addTask() {
+    if (!validateForm()) return;
 
     const newTask = {
       id: `${Date.now()}-${Math.random()}`,
-      title: trimmedTitle,
+      title: taskTitle.trim(),
       category: selectedCategory,
+      priority: selectedPriority,
+      dueDate: dueDate.trim(),
       completed: false,
     };
 
     setTasks((currentTasks) => [...currentTasks, newTask]);
-    setTaskTitle("");
-    setSelectedCategory("Personal");
-    setErrorMessage("");
+
+    resetForm();
     Keyboard.dismiss();
   }
 
-  // Load an existing task into the form.
   function startEditing(task) {
     setEditingTaskId(task.id);
     setTaskTitle(task.title);
     setSelectedCategory(task.category);
+    setSelectedPriority(task.priority);
+    setDueDate(task.dueDate || "");
     setErrorMessage("");
   }
 
-  // Save changes to the selected task without creating a duplicate.
   function saveTaskChanges() {
-    const trimmedTitle = taskTitle.trim();
-
-    if (!trimmedTitle) {
-      setErrorMessage("Task title cannot be empty.");
-      return;
-    }
+    if (!validateForm()) return;
 
     setTasks((currentTasks) =>
       currentTasks.map((task) =>
         task.id === editingTaskId
           ? {
               ...task,
-              title: trimmedTitle,
+              title: taskTitle.trim(),
               category: selectedCategory,
+              priority: selectedPriority,
+              dueDate: dueDate.trim(),
             }
           : task
       )
     );
 
-    setEditingTaskId(null);
-    setTaskTitle("");
-    setSelectedCategory("Personal");
-    setErrorMessage("");
+    resetForm();
     Keyboard.dismiss();
   }
 
   function cancelEditing() {
-    setEditingTaskId(null);
-    setTaskTitle("");
-    setSelectedCategory("Personal");
-    setErrorMessage("");
+    resetForm();
     Keyboard.dismiss();
   }
 
@@ -168,10 +244,7 @@ export default function App() {
       "Delete task",
       `Are you sure you want to delete "${title}"?`,
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
@@ -181,7 +254,7 @@ export default function App() {
             );
 
             if (editingTaskId === taskId) {
-              cancelEditing();
+              resetForm();
             }
           },
         },
@@ -280,10 +353,7 @@ export default function App() {
             value={taskTitle}
             onChangeText={(text) => {
               setTaskTitle(text);
-
-              if (errorMessage) {
-                setErrorMessage("");
-              }
+              if (errorMessage) setErrorMessage("");
             }}
             onSubmitEditing={
               editingTaskId ? saveTaskChanges : addTask
@@ -292,9 +362,7 @@ export default function App() {
             maxLength={120}
           />
 
-          <Text style={styles.fieldLabel}>
-            Choose a category
-          </Text>
+          <Text style={styles.fieldLabel}>Choose a category</Text>
 
           <View style={styles.categoryRow}>
             {CATEGORIES.map((category) => (
@@ -320,11 +388,55 @@ export default function App() {
             ))}
           </View>
 
+          <Text style={styles.fieldLabel}>Set priority</Text>
+
+          <View style={styles.categoryRow}>
+            {PRIORITIES.map((priority) => (
+              <Pressable
+                key={priority}
+                style={[
+                  styles.categoryButton,
+                  selectedPriority === priority &&
+                    styles.categoryButtonSelected,
+                ]}
+                onPress={() => setSelectedPriority(priority)}
+              >
+                <Text
+                  style={[
+                    styles.categoryButtonText,
+                    selectedPriority === priority &&
+                      styles.categoryButtonTextSelected,
+                  ]}
+                >
+                  {priority}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={styles.fieldLabel}>Due date (optional)</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="YYYY-MM-DD, e.g. 2026-11-15"
+            placeholderTextColor="#8A9999"
+            value={dueDate}
+            onChangeText={(text) => {
+              setDueDate(text);
+              if (errorMessage) setErrorMessage("");
+            }}
+            keyboardType="numbers-and-punctuation"
+            returnKeyType="done"
+            maxLength={10}
+          />
+
+          <Text style={styles.dateHint}>
+            Use year-month-day format, or leave blank.
+          </Text>
+
           <Pressable
             style={styles.addButton}
-            onPress={
-              editingTaskId ? saveTaskChanges : addTask
-            }
+            onPress={editingTaskId ? saveTaskChanges : addTask}
           >
             <Text style={styles.addButtonText}>
               {editingTaskId ? "Save changes" : "Add task"}
@@ -343,9 +455,7 @@ export default function App() {
           ) : null}
 
           {errorMessage ? (
-            <Text style={styles.errorText}>
-              {errorMessage}
-            </Text>
+            <Text style={styles.errorText}>{errorMessage}</Text>
           ) : null}
         </View>
 
@@ -382,71 +492,101 @@ export default function App() {
 
         {filteredTasks.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>
-              No tasks to show
-            </Text>
+            <Text style={styles.emptyTitle}>No tasks to show</Text>
             <Text style={styles.subtitleSmall}>
               Try another filter or add a new task.
             </Text>
           </View>
         ) : (
-          filteredTasks.map((task) => (
-            <View key={task.id} style={styles.taskCard}>
-              <Pressable
-                style={styles.taskMain}
-                onPress={() => toggleTask(task.id)}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    task.completed && styles.checkboxCompleted,
-                  ]}
-                >
-                  {task.completed ? (
-                    <Text style={styles.checkmark}>✓</Text>
-                  ) : null}
-                </View>
+          filteredTasks.map((task) => {
+            const dateStatus = getDueDateStatus(
+              task.dueDate,
+              task.completed
+            );
 
-                <View style={styles.taskTextContainer}>
-                  <Text
+            return (
+              <View key={task.id} style={styles.taskCard}>
+                <Pressable
+                  style={styles.taskMain}
+                  onPress={() => toggleTask(task.id)}
+                >
+                  <View
                     style={[
-                      styles.taskTitle,
-                      task.completed &&
-                        styles.completedTaskTitle,
+                      styles.checkbox,
+                      task.completed && styles.checkboxCompleted,
                     ]}
                   >
-                    {task.title}
-                  </Text>
+                    {task.completed ? (
+                      <Text style={styles.checkmark}>✓</Text>
+                    ) : null}
+                  </View>
 
-                  <Text style={styles.taskCategory}>
-                    {task.category}
-                  </Text>
+                  <View style={styles.taskTextContainer}>
+                    <Text
+                      style={[
+                        styles.taskTitle,
+                        task.completed && styles.completedTaskTitle,
+                      ]}
+                    >
+                      {task.title}
+                    </Text>
+
+                    <Text style={styles.taskCategory}>
+                      {task.category}
+                    </Text>
+
+                    <View style={styles.metadataRow}>
+                      <Text
+                        style={[
+                          styles.priorityBadge,
+                          task.priority === "High" && styles.highPriority,
+                          task.priority === "Medium" &&
+                            styles.mediumPriority,
+                          task.priority === "Low" && styles.lowPriority,
+                        ]}
+                      >
+                        {task.priority} priority
+                      </Text>
+                    </View>
+
+                    {task.dueDate ? (
+                      <Text
+                        style={[
+                          styles.dueDateText,
+                          dateStatus === "Overdue" &&
+                            styles.overdueText,
+                        ]}
+                      >
+                        Due: {task.dueDate} · {dateStatus}
+                      </Text>
+                    ) : (
+                      <Text style={styles.noDueDateText}>
+                        No due date
+                      </Text>
+                    )}
+                  </View>
+                </Pressable>
+
+                <View style={styles.taskActions}>
+                  <Pressable
+                    style={styles.editButton}
+                    onPress={() => startEditing(task)}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.deleteButton}
+                    onPress={() => deleteTask(task.id, task.title)}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </Pressable>
                 </View>
-              </Pressable>
-
-              <View style={styles.taskActions}>
-                <Pressable
-                  style={styles.editButton}
-                  onPress={() => startEditing(task)}
-                  hitSlop={8}
-                >
-                  <Text style={styles.editButtonText}>
-                    Edit
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.deleteButton}
-                  onPress={() => deleteTask(task.id, task.title)}
-                  hitSlop={8}
-                >
-                  <Text style={styles.deleteButtonText}>
-                    Delete
-                  </Text>
-                </Pressable>
               </View>
-            </View>
-          ))
+            );
+          })
         )}
 
         <Text style={styles.footer}>
@@ -563,6 +703,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 10,
   },
+  dateHint: {
+    fontSize: 11,
+    color: "#8A9999",
+    marginTop: 7,
+  },
   categoryRow: {
     flexDirection: "row",
     gap: 8,
@@ -648,17 +793,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 15,
     marginBottom: 11,
-    flexDirection: "row",
-    alignItems: "center",
     borderWidth: 1,
     borderColor: "#E6EEEE",
   },
   taskMain: {
-    flex: 1,
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 4,
-    paddingRight: 10,
+    alignItems: "flex-start",
   },
   checkbox: {
     width: 23,
@@ -667,6 +807,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#B7C6C6",
     marginRight: 12,
+    marginTop: 2,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -697,10 +838,50 @@ const styles = StyleSheet.create({
     color: "#16877F",
     marginTop: 5,
   },
+  metadataRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+  },
+  priorityBadge: {
+    fontSize: 11,
+    fontWeight: "700",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  highPriority: {
+    color: "#B42318",
+    backgroundColor: "#FEE4E2",
+  },
+  mediumPriority: {
+    color: "#92400E",
+    backgroundColor: "#FEF3C7",
+  },
+  lowPriority: {
+    color: "#166534",
+    backgroundColor: "#DCFCE7",
+  },
+  dueDateText: {
+    fontSize: 11,
+    color: "#526565",
+    marginTop: 7,
+  },
+  overdueText: {
+    color: "#C0392B",
+    fontWeight: "700",
+  },
+  noDueDateText: {
+    fontSize: 11,
+    color: "#8A9999",
+    marginTop: 7,
+  },
   taskActions: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 12,
   },
   editButton: {
     backgroundColor: "#E7F5F3",
