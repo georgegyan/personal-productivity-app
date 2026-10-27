@@ -1,53 +1,83 @@
 
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  StatusBar,
-  Pressable,
-  TextInput,
-  ScrollView,
-  Keyboard,
-  Alert,
-} from "react-native";
+import React, { useEffect, useState } from "react";
+import { Alert, Keyboard, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const STORAGE_KEY = "@personal_productivity_tasks";
+
 const initialTasks = [
-  { id: "1", title: "Review my daily goals", completed: false },
-  { id: "2", title: "Learn React Native", completed: false },
-  { id: "3", title: "Complete my daily practice", completed: false },
+  {
+    id: "1",
+    title: "Review my daily goals",
+    completed: false,
+  },
+  {
+    id: "2",
+    title: "Learn React Native",
+    completed: false,
+  },
+  {
+    id: "3",
+    title: "Complete my daily practice",
+    completed: false,
+  },
 ];
 
 export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
   const [taskTitle, setTaskTitle] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  const completedCount = tasks.filter(
-    (task) => task.completed
-  ).length;
+  // Load previously saved tasks when the app starts.
+  useEffect(() => {
+    async function loadTasks() {
+      try {
+        const savedTasks = await AsyncStorage.getItem(STORAGE_KEY);
 
-  const progress =
-    tasks.length === 0
-      ? 0
-      : (completedCount / tasks.length) * 100;
+        if (savedTasks !== null) {
+          const parsedTasks = JSON.parse(savedTasks);
 
-  function toggleTask(taskId) {
-    setTasks((currentTasks) =>
-      currentTasks.map((task) =>
-        task.id === taskId
-          ? { ...task, completed: !task.completed }
-          : task
-      )
-    );
-  }
+          if (Array.isArray(parsedTasks)) {
+            setTasks(parsedTasks);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load tasks:", error);
+      } finally {
+        setIsLoaded(true);
+      }
+    }
+
+    loadTasks();
+  }, []);
+
+  // Save tasks whenever they change, but only after loading finishes.
+  useEffect(() => {
+    if (!isLoaded) {
+      return;
+    }
+
+    async function saveTasks() {
+      try {
+        await AsyncStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(tasks)
+        );
+      } catch (error) {
+        console.error("Failed to save tasks:", error);
+      }
+    }
+
+    saveTasks();
+  }, [tasks, isLoaded]);
 
   function addTask() {
     const trimmedTitle = taskTitle.trim();
 
-    if (!trimmedTitle) {
-      setErrorMessage("Please enter a task title.");
+    if (trimmedTitle.length === 0) {
+      setErrorMessage("Please enter a task first.");
       return;
     }
 
@@ -63,10 +93,20 @@ export default function App() {
     Keyboard.dismiss();
   }
 
-  function deleteTask(taskId, taskTitle) {
+  function toggleTask(taskId) {
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === taskId
+          ? { ...task, completed: !task.completed }
+          : task
+      )
+    );
+  }
+
+  function deleteTask(taskId, title) {
     Alert.alert(
       "Delete task",
-      `Are you sure you want to delete "${taskTitle}"?`,
+      `Are you sure you want to delete "${title}"?`,
       [
         {
           text: "Cancel",
@@ -85,33 +125,53 @@ export default function App() {
     );
   }
 
+  const completedCount = tasks.filter(
+    (task) => task.completed
+  ).length;
+
+  const totalTasks = tasks.length;
+
+  const progress =
+    totalTasks === 0
+      ? 0
+      : Math.round((completedCount / totalTasks) * 100);
+
+  if (!isLoaded) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <StatusBar barStyle="dark-content" />
+        <Text style={styles.loadingText}>Loading your tasks...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F5F8F8" />
 
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.greeting}>Good day!</Text>
-
-        <Text style={styles.heading}>
-          Let's get things done.
-        </Text>
-
-        <Text style={styles.description}>
-          Organise your tasks and make today productive.
-        </Text>
+        <View style={styles.header}>
+          <Text style={styles.greeting}>MY PRODUCTIVITY</Text>
+          <Text style={styles.heading}>Stay focused.</Text>
+          <Text style={styles.subtitle}>
+            Small steps every day lead to big results.
+          </Text>
+        </View>
 
         <View style={styles.progressCard}>
-          <Text style={styles.progressLabel}>
-            TODAY'S PROGRESS
-          </Text>
+          <View style={styles.progressHeader}>
+            <View>
+              <Text style={styles.progressTitle}>Daily progress</Text>
+              <Text style={styles.progressSubtitle}>
+                Keep moving forward
+              </Text>
+            </View>
 
-          <Text style={styles.progressNumber}>
-            {completedCount} of {tasks.length} tasks completed
-          </Text>
+            <Text style={styles.progressPercentage}>{progress}%</Text>
+          </View>
 
           <View style={styles.progressTrack}>
             <View
@@ -122,18 +182,21 @@ export default function App() {
             />
           </View>
 
-          <Text style={styles.progressPercentage}>
-            {Math.round(progress)}% complete
+          <Text style={styles.progressCount}>
+            {completedCount} of {totalTasks} tasks completed
           </Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Add a new task</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>My tasks</Text>
+          <Text style={styles.taskCount}>{totalTasks} total</Text>
+        </View>
 
-        <View style={styles.inputRow}>
+        <View style={styles.inputCard}>
           <TextInput
-            style={styles.taskInput}
+            style={styles.input}
             placeholder="What do you need to do?"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor="#8A9999"
             value={taskTitle}
             onChangeText={(text) => {
               setTaskTitle(text);
@@ -143,52 +206,39 @@ export default function App() {
             }}
             onSubmitEditing={addTask}
             returnKeyType="done"
-            accessibilityLabel="New task title"
+            maxLength={120}
           />
 
           <Pressable
-            style={({ pressed }) => [
-              styles.addButton,
-              pressed && styles.addButtonPressed,
-            ]}
+            style={styles.addButton}
             onPress={addTask}
-            accessibilityRole="button"
-            accessibilityLabel="Add task"
           >
-            <Text style={styles.addButtonText}>Add</Text>
+            <Text style={styles.addButtonText}>Add task</Text>
           </Pressable>
+
+          {errorMessage ? (
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          ) : null}
         </View>
-
-        {errorMessage ? (
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        ) : null}
-
-        <Text style={styles.sectionTitle}>Today's tasks</Text>
 
         {tasks.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No tasks yet</Text>
-            <Text style={styles.emptyDescription}>
-              Add a task above to get started.
+            <Text style={styles.emptyTitle}>All clear!</Text>
+            <Text style={styles.emptyText}>
+              You have no tasks right now. Add one above to get started.
             </Text>
           </View>
         ) : (
           tasks.map((task) => (
             <View key={task.id} style={styles.taskCard}>
               <Pressable
-                style={({ pressed }) => [
-                  styles.taskMain,
-                  pressed && styles.taskMainPressed,
-                ]}
+                style={styles.taskMain}
                 onPress={() => toggleTask(task.id)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: task.completed }}
-                accessibilityLabel={task.title}
               >
                 <View
                   style={[
-                    styles.taskIndicator,
-                    task.completed && styles.taskIndicatorCompleted,
+                    styles.checkbox,
+                    task.completed && styles.checkboxCompleted,
                   ]}
                 >
                   {task.completed ? (
@@ -198,8 +248,8 @@ export default function App() {
 
                 <Text
                   style={[
-                    styles.taskText,
-                    task.completed && styles.taskTextCompleted,
+                    styles.taskTitle,
+                    task.completed && styles.completedTaskTitle,
                   ]}
                 >
                   {task.title}
@@ -207,14 +257,9 @@ export default function App() {
               </Pressable>
 
               <Pressable
-                style={({ pressed }) => [
-                  styles.deleteButton,
-                  pressed && styles.deleteButtonPressed,
-                ]}
+                style={styles.deleteButton}
                 onPress={() => deleteTask(task.id, task.title)}
-                accessibilityRole="button"
-                accessibilityLabel={`Delete ${task.title}`}
-                hitSlop={6}
+                hitSlop={8}
               >
                 <Text style={styles.deleteButtonText}>Delete</Text>
               </Pressable>
@@ -223,7 +268,7 @@ export default function App() {
         )}
 
         <Text style={styles.footer}>
-          Small steps. Consistent progress.
+          Your progress is saved automatically on this device.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -231,100 +276,128 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F8FAFC",
-  },
   container: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 32,
+    flex: 1,
+    backgroundColor: "#F5F8F8",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F5F8F8",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#526565",
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 40,
+  },
+  header: {
+    marginBottom: 24,
   },
   greeting: {
-    fontSize: 15,
-    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 2,
+    color: "#16877F",
     marginBottom: 8,
   },
   heading: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 10,
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#173333",
   },
-  description: {
+  subtitle: {
     fontSize: 15,
-    lineHeight: 23,
-    color: "#64748B",
-    marginBottom: 28,
+    color: "#687979",
+    marginTop: 8,
+    lineHeight: 22,
   },
   progressCard: {
-    backgroundColor: "#0F766E",
-    borderRadius: 20,
-    padding: 22,
-    marginBottom: 30,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: "#E6EEEE",
   },
-  progressLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 1,
-    color: "#CCFBF1",
-    marginBottom: 12,
-  },
-  progressNumber: {
-    fontSize: 19,
-    fontWeight: "700",
-    color: "#FFFFFF",
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 18,
   },
+  progressTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#173333",
+  },
+  progressSubtitle: {
+    fontSize: 13,
+    color: "#7B8989",
+    marginTop: 5,
+  },
+  progressPercentage: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#16877F",
+  },
   progressTrack: {
-    height: 7,
+    height: 9,
     borderRadius: 10,
-    backgroundColor: "#115E59",
+    backgroundColor: "#E6EEEE",
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    backgroundColor: "#16877F",
   },
-  progressPercentage: {
-    fontSize: 12,
-    color: "#CCFBF1",
-    marginTop: 10,
+  progressCount: {
+    marginTop: 12,
+    fontSize: 13,
+    color: "#687979",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 16,
+    fontSize: 21,
+    fontWeight: "800",
+    color: "#173333",
   },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-    gap: 10,
+  taskCount: {
+    fontSize: 13,
+    color: "#687979",
   },
-  taskInput: {
-    flex: 1,
-    minWidth: 0,
+  inputCard: {
     backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
-    borderRadius: 12,
+    borderColor: "#E6EEEE",
+  },
+  input: {
+    backgroundColor: "#F7FAFA",
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 15,
-    color: "#0F172A",
+    color: "#173333",
   },
   addButton: {
-    backgroundColor: "#0F766E",
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 15,
+    backgroundColor: "#16877F",
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: "center",
-    justifyContent: "center",
-  },
-  addButtonPressed: {
-    opacity: 0.75,
+    marginTop: 10,
   },
   addButtonText: {
     color: "#FFFFFF",
@@ -332,96 +405,91 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   errorText: {
-    color: "#DC2626",
+    color: "#C0392B",
     fontSize: 13,
-    marginBottom: 18,
+    marginTop: 10,
   },
   taskCard: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
-    padding: 10,
-    paddingLeft: 14,
-    marginBottom: 12,
+    padding: 15,
+    marginBottom: 11,
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#E6EEEE",
   },
   taskMain: {
     flex: 1,
-    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingRight: 8,
+    paddingVertical: 4,
+    paddingRight: 10,
   },
-  taskMainPressed: {
-    opacity: 0.7,
-  },
-  taskIndicator: {
-    width: 22,
-    height: 22,
+  checkbox: {
+    width: 23,
+    height: 23,
     borderRadius: 7,
-    borderWidth: 1.5,
-    borderColor: "#94A3B8",
+    borderWidth: 2,
+    borderColor: "#B7C6C6",
     marginRight: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  taskIndicatorCompleted: {
-    backgroundColor: "#0F766E",
-    borderColor: "#0F766E",
+  checkboxCompleted: {
+    backgroundColor: "#16877F",
+    borderColor: "#16877F",
   },
   checkmark: {
     color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  taskText: {
-    flex: 1,
     fontSize: 15,
-    color: "#334155",
+    fontWeight: "800",
   },
-  taskTextCompleted: {
-    color: "#94A3B8",
+  taskTitle: {
+    flex: 1,
+    fontSize: 14,
+    color: "#243B3B",
+    lineHeight: 21,
+  },
+  completedTaskTitle: {
+    color: "#94A1A1",
     textDecorationLine: "line-through",
   },
   deleteButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    backgroundColor: "#FFF0EF",
+    paddingHorizontal: 11,
+    paddingVertical: 9,
     borderRadius: 8,
   },
-  deleteButtonPressed: {
-    backgroundColor: "#FEE2E2",
-  },
   deleteButtonText: {
-    color: "#DC2626",
-    fontSize: 13,
-    fontWeight: "600",
+    color: "#C0392B",
+    fontSize: 12,
+    fontWeight: "700",
   },
   emptyState: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 25,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 14,
-    padding: 24,
+    borderColor: "#E6EEEE",
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
-    color: "#334155",
-    marginBottom: 6,
+    color: "#173333",
+    marginBottom: 8,
   },
-  emptyDescription: {
-    fontSize: 14,
-    color: "#64748B",
+  emptyText: {
     textAlign: "center",
+    fontSize: 14,
+    color: "#687979",
+    lineHeight: 21,
   },
   footer: {
+    marginTop: 22,
     textAlign: "center",
-    fontSize: 13,
-    color: "#94A3B8",
-    marginTop: 18,
+    fontSize: 12,
+    color: "#8A9999",
   },
 });
