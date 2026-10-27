@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const STORAGE_KEY = "@personal_productivity_tasks";
 
 const CATEGORIES = ["Personal", "Study", "Work"];
+const FILTERS = ["All", "Pending", "Completed"];
 
 const initialTasks = [
   {
@@ -29,8 +30,6 @@ const initialTasks = [
   },
 ];
 
-const FILTERS = ["All", "Pending", "Completed"];
-
 export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
   const [taskTitle, setTaskTitle] = useState("");
@@ -38,7 +37,9 @@ export default function App() {
   const [selectedFilter, setSelectedFilter] = useState("All");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
 
+  // Load saved tasks when the app starts.
   useEffect(() => {
     async function loadTasks() {
       try {
@@ -48,7 +49,6 @@ export default function App() {
           const parsedTasks = JSON.parse(savedTasks);
 
           if (Array.isArray(parsedTasks)) {
-            // Support tasks saved before categories were introduced.
             const compatibleTasks = parsedTasks.map((task) => ({
               ...task,
               category: CATEGORIES.includes(task.category)
@@ -69,6 +69,7 @@ export default function App() {
     loadTasks();
   }, []);
 
+  // Save task changes after the initial load finishes.
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -103,6 +104,51 @@ export default function App() {
 
     setTasks((currentTasks) => [...currentTasks, newTask]);
     setTaskTitle("");
+    setSelectedCategory("Personal");
+    setErrorMessage("");
+    Keyboard.dismiss();
+  }
+
+  // Load an existing task into the form.
+  function startEditing(task) {
+    setEditingTaskId(task.id);
+    setTaskTitle(task.title);
+    setSelectedCategory(task.category);
+    setErrorMessage("");
+  }
+
+  // Save changes to the selected task without creating a duplicate.
+  function saveTaskChanges() {
+    const trimmedTitle = taskTitle.trim();
+
+    if (!trimmedTitle) {
+      setErrorMessage("Task title cannot be empty.");
+      return;
+    }
+
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === editingTaskId
+          ? {
+              ...task,
+              title: trimmedTitle,
+              category: selectedCategory,
+            }
+          : task
+      )
+    );
+
+    setEditingTaskId(null);
+    setTaskTitle("");
+    setSelectedCategory("Personal");
+    setErrorMessage("");
+    Keyboard.dismiss();
+  }
+
+  function cancelEditing() {
+    setEditingTaskId(null);
+    setTaskTitle("");
+    setSelectedCategory("Personal");
     setErrorMessage("");
     Keyboard.dismiss();
   }
@@ -122,7 +168,10 @@ export default function App() {
       "Delete task",
       `Are you sure you want to delete "${title}"?`,
       [
-        { text: "Cancel", style: "cancel" },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
         {
           text: "Delete",
           style: "destructive",
@@ -130,6 +179,10 @@ export default function App() {
             setTasks((currentTasks) =>
               currentTasks.filter((task) => task.id !== taskId)
             );
+
+            if (editingTaskId === taskId) {
+              cancelEditing();
+            }
           },
         },
       ]
@@ -170,7 +223,10 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5F8F8" />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="#F5F8F8"
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -192,7 +248,10 @@ export default function App() {
                 Keep moving forward
               </Text>
             </View>
-            <Text style={styles.progressPercentage}>{progress}%</Text>
+
+            <Text style={styles.progressPercentage}>
+              {progress}%
+            </Text>
           </View>
 
           <View style={styles.progressTrack}>
@@ -209,7 +268,9 @@ export default function App() {
           </Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Add a task</Text>
+        <Text style={styles.sectionTitle}>
+          {editingTaskId ? "Edit task" : "Add a task"}
+        </Text>
 
         <View style={styles.inputCard}>
           <TextInput
@@ -219,14 +280,21 @@ export default function App() {
             value={taskTitle}
             onChangeText={(text) => {
               setTaskTitle(text);
-              if (errorMessage) setErrorMessage("");
+
+              if (errorMessage) {
+                setErrorMessage("");
+              }
             }}
-            onSubmitEditing={addTask}
+            onSubmitEditing={
+              editingTaskId ? saveTaskChanges : addTask
+            }
             returnKeyType="done"
             maxLength={120}
           />
 
-          <Text style={styles.fieldLabel}>Choose a category</Text>
+          <Text style={styles.fieldLabel}>
+            Choose a category
+          </Text>
 
           <View style={styles.categoryRow}>
             {CATEGORIES.map((category) => (
@@ -252,12 +320,32 @@ export default function App() {
             ))}
           </View>
 
-          <Pressable style={styles.addButton} onPress={addTask}>
-            <Text style={styles.addButtonText}>Add task</Text>
+          <Pressable
+            style={styles.addButton}
+            onPress={
+              editingTaskId ? saveTaskChanges : addTask
+            }
+          >
+            <Text style={styles.addButtonText}>
+              {editingTaskId ? "Save changes" : "Add task"}
+            </Text>
           </Pressable>
 
+          {editingTaskId ? (
+            <Pressable
+              style={styles.cancelButton}
+              onPress={cancelEditing}
+            >
+              <Text style={styles.cancelButtonText}>
+                Cancel editing
+              </Text>
+            </Pressable>
+          ) : null}
+
           {errorMessage ? (
-            <Text style={styles.errorText}>{errorMessage}</Text>
+            <Text style={styles.errorText}>
+              {errorMessage}
+            </Text>
           ) : null}
         </View>
 
@@ -274,14 +362,16 @@ export default function App() {
               key={filter}
               style={[
                 styles.filterButton,
-                selectedFilter === filter && styles.filterButtonSelected,
+                selectedFilter === filter &&
+                  styles.filterButtonSelected,
               ]}
               onPress={() => setSelectedFilter(filter)}
             >
               <Text
                 style={[
                   styles.filterText,
-                  selectedFilter === filter && styles.filterTextSelected,
+                  selectedFilter === filter &&
+                    styles.filterTextSelected,
                 ]}
               >
                 {filter}
@@ -292,7 +382,9 @@ export default function App() {
 
         {filteredTasks.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No tasks to show</Text>
+            <Text style={styles.emptyTitle}>
+              No tasks to show
+            </Text>
             <Text style={styles.subtitleSmall}>
               Try another filter or add a new task.
             </Text>
@@ -319,24 +411,40 @@ export default function App() {
                   <Text
                     style={[
                       styles.taskTitle,
-                      task.completed && styles.completedTaskTitle,
+                      task.completed &&
+                        styles.completedTaskTitle,
                     ]}
                   >
                     {task.title}
                   </Text>
+
                   <Text style={styles.taskCategory}>
                     {task.category}
                   </Text>
                 </View>
               </Pressable>
 
-              <Pressable
-                style={styles.deleteButton}
-                onPress={() => deleteTask(task.id, task.title)}
-                hitSlop={8}
-              >
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </Pressable>
+              <View style={styles.taskActions}>
+                <Pressable
+                  style={styles.editButton}
+                  onPress={() => startEditing(task)}
+                  hitSlop={8}
+                >
+                  <Text style={styles.editButtonText}>
+                    Edit
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.deleteButton}
+                  onPress={() => deleteTask(task.id, task.title)}
+                  hitSlop={8}
+                >
+                  <Text style={styles.deleteButtonText}>
+                    Delete
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           ))
         )}
@@ -350,15 +458,24 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F8F8" },
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F8F8",
+  },
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#F5F8F8",
   },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 40 },
-  header: { marginBottom: 24 },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 40,
+  },
+  header: {
+    marginBottom: 24,
+  },
   greeting: {
     fontSize: 12,
     fontWeight: "700",
@@ -366,9 +483,22 @@ const styles = StyleSheet.create({
     color: "#16877F",
     marginBottom: 8,
   },
-  heading: { fontSize: 32, fontWeight: "800", color: "#173333" },
-  subtitle: { fontSize: 15, color: "#687979", marginTop: 8, lineHeight: 22 },
-  subtitleSmall: { fontSize: 13, color: "#687979", marginTop: 6 },
+  heading: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#173333",
+  },
+  subtitle: {
+    fontSize: 15,
+    color: "#687979",
+    marginTop: 8,
+    lineHeight: 22,
+  },
+  subtitleSmall: {
+    fontSize: 13,
+    color: "#687979",
+    marginTop: 6,
+  },
   progressCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
@@ -383,8 +513,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 18,
   },
-  progressTitle: { fontSize: 17, fontWeight: "700", color: "#173333" },
-  progressPercentage: { fontSize: 24, fontWeight: "800", color: "#16877F" },
+  progressTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#173333",
+  },
+  progressPercentage: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#16877F",
+  },
   progressTrack: {
     height: 9,
     borderRadius: 10,
@@ -425,7 +563,10 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 10,
   },
-  categoryRow: { flexDirection: "row", gap: 8 },
+  categoryRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
   categoryButton: {
     flex: 1,
     paddingVertical: 10,
@@ -444,7 +585,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#526565",
   },
-  categoryButtonTextSelected: { color: "#FFFFFF" },
+  categoryButtonTextSelected: {
+    color: "#FFFFFF",
+  },
   addButton: {
     backgroundColor: "#16877F",
     paddingVertical: 14,
@@ -452,14 +595,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 12,
   },
-  addButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
-  errorText: { color: "#C0392B", fontSize: 13, marginTop: 10 },
+  addButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  cancelButton: {
+    alignItems: "center",
+    paddingVertical: 12,
+    marginTop: 6,
+  },
+  cancelButtonText: {
+    color: "#687979",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  errorText: {
+    color: "#C0392B",
+    fontSize: 13,
+    marginTop: 10,
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  filterRow: { flexDirection: "row", gap: 9, marginBottom: 15 },
+  filterRow: {
+    flexDirection: "row",
+    gap: 9,
+    marginBottom: 15,
+  },
   filterButton: {
     flex: 1,
     alignItems: "center",
@@ -467,9 +632,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#E8EEEE",
   },
-  filterButtonSelected: { backgroundColor: "#173F3C" },
-  filterText: { fontSize: 13, fontWeight: "600", color: "#526565" },
-  filterTextSelected: { color: "#FFFFFF" },
+  filterButtonSelected: {
+    backgroundColor: "#173F3C",
+  },
+  filterText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#526565",
+  },
+  filterTextSelected: {
+    color: "#FFFFFF",
+  },
   taskCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
@@ -497,10 +670,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkboxCompleted: { backgroundColor: "#16877F", borderColor: "#16877F" },
-  checkmark: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
-  taskTextContainer: { flex: 1 },
-  taskTitle: { fontSize: 14, color: "#243B3B", lineHeight: 21 },
+  checkboxCompleted: {
+    backgroundColor: "#16877F",
+    borderColor: "#16877F",
+  },
+  checkmark: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  taskTextContainer: {
+    flex: 1,
+  },
+  taskTitle: {
+    fontSize: 14,
+    color: "#243B3B",
+    lineHeight: 21,
+  },
   completedTaskTitle: {
     color: "#94A1A1",
     textDecorationLine: "line-through",
@@ -511,13 +697,33 @@ const styles = StyleSheet.create({
     color: "#16877F",
     marginTop: 5,
   },
+  taskActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  editButton: {
+    backgroundColor: "#E7F5F3",
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  editButtonText: {
+    color: "#16877F",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   deleteButton: {
     backgroundColor: "#FFF0EF",
     paddingHorizontal: 11,
     paddingVertical: 9,
     borderRadius: 8,
   },
-  deleteButtonText: { color: "#C0392B", fontSize: 12, fontWeight: "700" },
+  deleteButtonText: {
+    color: "#C0392B",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   emptyState: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
