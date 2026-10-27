@@ -6,31 +6,39 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const STORAGE_KEY = "@personal_productivity_tasks";
 
+const CATEGORIES = ["Personal", "Study", "Work"];
+
 const initialTasks = [
   {
     id: "1",
     title: "Review my daily goals",
+    category: "Personal",
     completed: false,
   },
   {
     id: "2",
     title: "Learn React Native",
+    category: "Study",
     completed: false,
   },
   {
     id: "3",
     title: "Complete my daily practice",
+    category: "Work",
     completed: false,
   },
 ];
 
+const FILTERS = ["All", "Pending", "Completed"];
+
 export default function App() {
   const [tasks, setTasks] = useState(initialTasks);
   const [taskTitle, setTaskTitle] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Personal");
+  const [selectedFilter, setSelectedFilter] = useState("All");
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load previously saved tasks when the app starts.
   useEffect(() => {
     async function loadTasks() {
       try {
@@ -40,7 +48,15 @@ export default function App() {
           const parsedTasks = JSON.parse(savedTasks);
 
           if (Array.isArray(parsedTasks)) {
-            setTasks(parsedTasks);
+            // Support tasks saved before categories were introduced.
+            const compatibleTasks = parsedTasks.map((task) => ({
+              ...task,
+              category: CATEGORIES.includes(task.category)
+                ? task.category
+                : "Personal",
+            }));
+
+            setTasks(compatibleTasks);
           }
         }
       } catch (error) {
@@ -53,11 +69,8 @@ export default function App() {
     loadTasks();
   }, []);
 
-  // Save tasks whenever they change, but only after loading finishes.
   useEffect(() => {
-    if (!isLoaded) {
-      return;
-    }
+    if (!isLoaded) return;
 
     async function saveTasks() {
       try {
@@ -76,7 +89,7 @@ export default function App() {
   function addTask() {
     const trimmedTitle = taskTitle.trim();
 
-    if (trimmedTitle.length === 0) {
+    if (!trimmedTitle) {
       setErrorMessage("Please enter a task first.");
       return;
     }
@@ -84,6 +97,7 @@ export default function App() {
     const newTask = {
       id: `${Date.now()}-${Math.random()}`,
       title: trimmedTitle,
+      category: selectedCategory,
       completed: false,
     };
 
@@ -108,10 +122,7 @@ export default function App() {
       "Delete task",
       `Are you sure you want to delete "${title}"?`,
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
@@ -136,11 +147,23 @@ export default function App() {
       ? 0
       : Math.round((completedCount / totalTasks) * 100);
 
+  const filteredTasks = tasks.filter((task) => {
+    if (selectedFilter === "Pending" && task.completed) {
+      return false;
+    }
+
+    if (selectedFilter === "Completed" && !task.completed) {
+      return false;
+    }
+
+    return true;
+  });
+
   if (!isLoaded) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <StatusBar barStyle="dark-content" />
-        <Text style={styles.loadingText}>Loading your tasks...</Text>
+        <Text style={styles.subtitle}>Loading your tasks...</Text>
       </SafeAreaView>
     );
   }
@@ -157,7 +180,7 @@ export default function App() {
           <Text style={styles.greeting}>MY PRODUCTIVITY</Text>
           <Text style={styles.heading}>Stay focused.</Text>
           <Text style={styles.subtitle}>
-            Small steps every day lead to big results.
+            Organize your day, one task at a time.
           </Text>
         </View>
 
@@ -165,11 +188,10 @@ export default function App() {
           <View style={styles.progressHeader}>
             <View>
               <Text style={styles.progressTitle}>Daily progress</Text>
-              <Text style={styles.progressSubtitle}>
+              <Text style={styles.subtitleSmall}>
                 Keep moving forward
               </Text>
             </View>
-
             <Text style={styles.progressPercentage}>{progress}%</Text>
           </View>
 
@@ -182,15 +204,12 @@ export default function App() {
             />
           </View>
 
-          <Text style={styles.progressCount}>
+          <Text style={styles.subtitleSmall}>
             {completedCount} of {totalTasks} tasks completed
           </Text>
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>My tasks</Text>
-          <Text style={styles.taskCount}>{totalTasks} total</Text>
-        </View>
+        <Text style={styles.sectionTitle}>Add a task</Text>
 
         <View style={styles.inputCard}>
           <TextInput
@@ -200,19 +219,40 @@ export default function App() {
             value={taskTitle}
             onChangeText={(text) => {
               setTaskTitle(text);
-              if (errorMessage) {
-                setErrorMessage("");
-              }
+              if (errorMessage) setErrorMessage("");
             }}
             onSubmitEditing={addTask}
             returnKeyType="done"
             maxLength={120}
           />
 
-          <Pressable
-            style={styles.addButton}
-            onPress={addTask}
-          >
+          <Text style={styles.fieldLabel}>Choose a category</Text>
+
+          <View style={styles.categoryRow}>
+            {CATEGORIES.map((category) => (
+              <Pressable
+                key={category}
+                style={[
+                  styles.categoryButton,
+                  selectedCategory === category &&
+                    styles.categoryButtonSelected,
+                ]}
+                onPress={() => setSelectedCategory(category)}
+              >
+                <Text
+                  style={[
+                    styles.categoryButtonText,
+                    selectedCategory === category &&
+                      styles.categoryButtonTextSelected,
+                  ]}
+                >
+                  {category}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Pressable style={styles.addButton} onPress={addTask}>
             <Text style={styles.addButtonText}>Add task</Text>
           </Pressable>
 
@@ -221,15 +261,44 @@ export default function App() {
           ) : null}
         </View>
 
-        {tasks.length === 0 ? (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>My tasks</Text>
+          <Text style={styles.subtitleSmall}>
+            {filteredTasks.length} shown
+          </Text>
+        </View>
+
+        <View style={styles.filterRow}>
+          {FILTERS.map((filter) => (
+            <Pressable
+              key={filter}
+              style={[
+                styles.filterButton,
+                selectedFilter === filter && styles.filterButtonSelected,
+              ]}
+              onPress={() => setSelectedFilter(filter)}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  selectedFilter === filter && styles.filterTextSelected,
+                ]}
+              >
+                {filter}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {filteredTasks.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>All clear!</Text>
-            <Text style={styles.emptyText}>
-              You have no tasks right now. Add one above to get started.
+            <Text style={styles.emptyTitle}>No tasks to show</Text>
+            <Text style={styles.subtitleSmall}>
+              Try another filter or add a new task.
             </Text>
           </View>
         ) : (
-          tasks.map((task) => (
+          filteredTasks.map((task) => (
             <View key={task.id} style={styles.taskCard}>
               <Pressable
                 style={styles.taskMain}
@@ -246,14 +315,19 @@ export default function App() {
                   ) : null}
                 </View>
 
-                <Text
-                  style={[
-                    styles.taskTitle,
-                    task.completed && styles.completedTaskTitle,
-                  ]}
-                >
-                  {task.title}
-                </Text>
+                <View style={styles.taskTextContainer}>
+                  <Text
+                    style={[
+                      styles.taskTitle,
+                      task.completed && styles.completedTaskTitle,
+                    ]}
+                  >
+                    {task.title}
+                  </Text>
+                  <Text style={styles.taskCategory}>
+                    {task.category}
+                  </Text>
+                </View>
               </Pressable>
 
               <Pressable
@@ -268,7 +342,7 @@ export default function App() {
         )}
 
         <Text style={styles.footer}>
-          Your progress is saved automatically on this device.
+          Your tasks are saved automatically on this device.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -276,28 +350,15 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F8F8",
-  },
+  container: { flex: 1, backgroundColor: "#F5F8F8" },
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#F5F8F8",
   },
-  loadingText: {
-    fontSize: 16,
-    color: "#526565",
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 28,
-    paddingBottom: 40,
-  },
-  header: {
-    marginBottom: 24,
-  },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 40 },
+  header: { marginBottom: 24 },
   greeting: {
     fontSize: 12,
     fontWeight: "700",
@@ -305,17 +366,9 @@ const styles = StyleSheet.create({
     color: "#16877F",
     marginBottom: 8,
   },
-  heading: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#173333",
-  },
-  subtitle: {
-    fontSize: 15,
-    color: "#687979",
-    marginTop: 8,
-    lineHeight: 22,
-  },
+  heading: { fontSize: 32, fontWeight: "800", color: "#173333" },
+  subtitle: { fontSize: 15, color: "#687979", marginTop: 8, lineHeight: 22 },
+  subtitleSmall: { fontSize: 13, color: "#687979", marginTop: 6 },
   progressCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
@@ -330,21 +383,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 18,
   },
-  progressTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#173333",
-  },
-  progressSubtitle: {
-    fontSize: 13,
-    color: "#7B8989",
-    marginTop: 5,
-  },
-  progressPercentage: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#16877F",
-  },
+  progressTitle: { fontSize: 17, fontWeight: "700", color: "#173333" },
+  progressPercentage: { fontSize: 24, fontWeight: "800", color: "#16877F" },
   progressTrack: {
     height: 9,
     borderRadius: 10,
@@ -356,31 +396,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#16877F",
   },
-  progressCount: {
-    marginTop: 12,
-    fontSize: 13,
-    color: "#687979",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
   sectionTitle: {
     fontSize: 21,
     fontWeight: "800",
     color: "#173333",
-  },
-  taskCount: {
-    fontSize: 13,
-    color: "#687979",
+    marginBottom: 14,
   },
   inputCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 25,
     borderWidth: 1,
     borderColor: "#E6EEEE",
   },
@@ -392,23 +418,58 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#173333",
   },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#526565",
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  categoryRow: { flexDirection: "row", gap: 8 },
+  categoryButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "#DCE6E6",
+    backgroundColor: "#FFFFFF",
+  },
+  categoryButtonSelected: {
+    backgroundColor: "#16877F",
+    borderColor: "#16877F",
+  },
+  categoryButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#526565",
+  },
+  categoryButtonTextSelected: { color: "#FFFFFF" },
   addButton: {
     backgroundColor: "#16877F",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 12,
   },
-  addButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "700",
+  addButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
+  errorText: { color: "#C0392B", fontSize: 13, marginTop: 10 },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  errorText: {
-    color: "#C0392B",
-    fontSize: 13,
-    marginTop: 10,
+  filterRow: { flexDirection: "row", gap: 9, marginBottom: 15 },
+  filterButton: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: "#E8EEEE",
   },
+  filterButtonSelected: { backgroundColor: "#173F3C" },
+  filterText: { fontSize: 13, fontWeight: "600", color: "#526565" },
+  filterTextSelected: { color: "#FFFFFF" },
   taskCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
@@ -436,24 +497,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkboxCompleted: {
-    backgroundColor: "#16877F",
-    borderColor: "#16877F",
-  },
-  checkmark: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  taskTitle: {
-    flex: 1,
-    fontSize: 14,
-    color: "#243B3B",
-    lineHeight: 21,
-  },
+  checkboxCompleted: { backgroundColor: "#16877F", borderColor: "#16877F" },
+  checkmark: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+  taskTextContainer: { flex: 1 },
+  taskTitle: { fontSize: 14, color: "#243B3B", lineHeight: 21 },
   completedTaskTitle: {
     color: "#94A1A1",
     textDecorationLine: "line-through",
+  },
+  taskCategory: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#16877F",
+    marginTop: 5,
   },
   deleteButton: {
     backgroundColor: "#FFF0EF",
@@ -461,11 +517,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 8,
   },
-  deleteButtonText: {
-    color: "#C0392B",
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  deleteButtonText: { color: "#C0392B", fontSize: 12, fontWeight: "700" },
   emptyState: {
     alignItems: "center",
     backgroundColor: "#FFFFFF",
@@ -478,13 +530,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#173333",
-    marginBottom: 8,
-  },
-  emptyText: {
-    textAlign: "center",
-    fontSize: 14,
-    color: "#687979",
-    lineHeight: 21,
+    marginBottom: 5,
   },
   footer: {
     marginTop: 22,
